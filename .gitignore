@@ -30,3 +30,5 @@
 *.exe
 *.out
 *.app
+dfva_c/dfva
+dfva_c.geany
