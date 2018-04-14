@@ -3,6 +3,9 @@
 #include <cstdlib>
 #include <libconfig.h++>
 
+#ifndef _dfva_settings_
+#define _dfva_settings_
+
 using namespace std;
 using namespace libconfig;
 
@@ -56,3 +59,4 @@ class SettingsManager{
 		 char * get_config_filename();
 		 AppSettings _load_settings_from_file();
 };
+#endif

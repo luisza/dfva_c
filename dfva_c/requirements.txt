@@ -2,3 +2,4 @@ libconfig8-dev
 libcurl4-openssl-dev
 libjsoncpp-dev
 libicu-dev
+libcrypto++-dev

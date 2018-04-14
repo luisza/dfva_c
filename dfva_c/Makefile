@@ -1,4 +1,4 @@
-LIBS = -lconfig++ -lcurl -ljsoncpp -lcrypto
+LIBS = -lconfig++ -lcurl -ljsoncpp -lcrypto -lcryptopp
 CFLAGS = -O -Wall -c  $(LIBS)
 CC = g++ 
 

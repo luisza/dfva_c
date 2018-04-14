@@ -30,7 +30,7 @@ int main( int argc, const char* argv[] )
 	**/
 
 	DFVACrypto crypto;
-	DFVAClient client;
+/**	DFVAClient client;
 	Json::Value value = client.authenticate("402120119");
 	string data = value.toStyledString(); 
 	char * vdata = new char [data.length()+1];
@@ -39,5 +39,7 @@ int main( int argc, const char* argv[] )
 	char * b64=crypto.base64encode(reinterpret_cast<unsigned char *>(vdata), strlen(vdata));
 	cout <<  string(b64) << endl << endl ;
 	cout << crypto.get_hash_sum(value.toStyledString(), "sha384") << endl;
+**/
+	cout << crypto.encrypt("Hola mundo") << endl;
 }
 

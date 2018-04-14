@@ -1,14 +1,40 @@
 #include <openssl/sha.h>
-#include "crypto.h"
 #include <stdio.h>
 #include <string.h>
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/rsa.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+#include <openssl/aes.h> 
+#include <cryptopp/cryptlib.h> 
+#include <cryptopp/aes.h> 
+#include <cryptopp/eax.h> 
+#include <cryptopp/filters.h>
+#include <cryptopp/osrng.h>
+
+#include "crypto.h"
+
+#define SESSION_KEY_SIZE 16
+
 using namespace std;
 
-DFVACrypto::DFVACrypto(){}
+using CryptoPP::AES;
+using CryptoPP::EAX;
+using CryptoPP::StringSink;
+using CryptoPP::StringSource;
+using CryptoPP::AutoSeededRandomPool;
+using CryptoPP::AuthenticatedEncryptionFilter;
+using CryptoPP::AuthenticatedDecryptionFilter;
+
+DFVACrypto::DFVACrypto(){
+	SettingsManager settingsManager;
+	settings=settingsManager.load_settings_from_file();
+}
 
 char * DFVACrypto::base64encode(const unsigned char *input, int length)
 {
@@ -85,5 +111,67 @@ string  DFVACrypto::get_hash_sum(string rdata, string algorithm){
 
 	return dev;
 }
-string  DFVACrypto::encrypt(string data){ return data;}
+
+
+
+RSA * DFVACrypto::get_public_key(){
+
+	char * vkey = new char [this->settings.SERVER_PUBLIC_KEY.length()+1];
+	strcpy (vkey, this->settings.SERVER_PUBLIC_KEY.c_str());
+	unsigned char * key = reinterpret_cast<unsigned char *>(vkey);
+	
+	RSA *rsa= NULL;
+	BIO *keybio ;
+    keybio = BIO_new_mem_buf(key, -1);
+    rsa = PEM_read_bio_RSA_PUBKEY(keybio, &rsa,NULL, NULL);
+    return rsa;
+}
+RSA * DFVACrypto::get_private_key(){
+
+	char * vkey = new char [this->settings.PRIVATE_KEY.length()+1];
+	strcpy (vkey, this->settings.PRIVATE_KEY.c_str());
+	unsigned char * key = reinterpret_cast<unsigned char *>(vkey);
+
+	RSA *rsa= NULL;
+	BIO *keybio ;
+    keybio = BIO_new_mem_buf(key, -1);
+    rsa = PEM_read_bio_RSAPrivateKey(keybio, &rsa,NULL, NULL);
+    
+    return rsa;
+}
+
+string  DFVACrypto::encrypt(string data){ 
+	string ciphertext;
+	char * vdata = new char [data.length()+1];
+	strcpy (vdata, data.c_str());
+	
+	unsigned char session_key[SESSION_KEY_SIZE];
+	RAND_bytes(session_key, sizeof(session_key));
+	
+	int data_len=strlen(vdata);
+	
+    RSA * pub_key = this->get_public_key();
+    char *session_key_enc = (char *)malloc(RSA_size(pub_key));
+    int result = RSA_public_encrypt(data_len, 
+					session_key, 
+					reinterpret_cast<unsigned char *>(session_key_enc),
+					pub_key,  
+					RSA_PKCS1_OAEP_PADDING);
+					
+	// AES EAX mode
+	AutoSeededRandomPool rng;
+	EAX< AES >::Encryption enc;
+	byte iv[ AES::BLOCKSIZE * 16 ];
+    rng.GenerateBlock( iv, sizeof(iv) );
+    
+    enc.SetKeyWithIV( session_key, sizeof(session_key), iv, sizeof(iv) );
+
+	StringSource ss( data, true,
+		new AuthenticatedEncryptionFilter( enc,
+			new StringSink( ciphertext )
+		) // AuthenticatedEncryptionFilter
+	); // StringSource
+
+	return ciphertext;
+}
 string  DFVACrypto::decrypt(string data){ return data;}
