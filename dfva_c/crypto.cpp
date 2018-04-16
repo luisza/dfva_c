@@ -1,6 +1,7 @@
 #include <openssl/sha.h>
 #include <stdio.h>
 #include <string.h>
+#include <iostream> 
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 #include <openssl/bio.h>
@@ -16,7 +17,7 @@
 #include <cryptopp/eax.h> 
 #include <cryptopp/filters.h>
 #include <cryptopp/osrng.h>
-
+#include <cryptopp/base64.h> 
 #include "crypto.h"
 
 #define SESSION_KEY_SIZE 16
@@ -30,6 +31,11 @@ using CryptoPP::StringSource;
 using CryptoPP::AutoSeededRandomPool;
 using CryptoPP::AuthenticatedEncryptionFilter;
 using CryptoPP::AuthenticatedDecryptionFilter;
+using CryptoPP::Exception;
+using CryptoPP::Base64Decoder;
+
+
+// https://stackoverflow.com/questions/20967964/crypto-symmetric-algorithms-and-authenticated-block-modes-combinations
 
 DFVACrypto::DFVACrypto(){
 	SettingsManager settingsManager;
@@ -58,22 +64,15 @@ char * DFVACrypto::base64encode(const unsigned char *input, int length)
 }
 
  
-char * DFVACrypto::base64decode(unsigned char *input, int length)
+string DFVACrypto::base64decode(string encoded)
 {
-  BIO *b64, *bmem;
- 
-  char *buffer = (char *)malloc(length);
-  memset(buffer, 0, length);
- 
-  b64 = BIO_new(BIO_f_base64());
-  bmem = BIO_new_mem_buf(input, length);
-  bmem = BIO_push(b64, bmem);
- 
-  BIO_read(bmem, buffer, length);
- 
-  BIO_free_all(bmem);
- 
-  return buffer;
+	string decoded;
+	Base64Decoder decoder;
+	decoder.Attach( new StringSink( decoded ) );
+
+	decoder.Put( (byte*)encoded.data(), encoded.size() );
+	decoder.MessageEnd();
+	return decoded;
 }
 
 string  DFVACrypto::get_hash_sum(string rdata, string algorithm){ 
@@ -140,38 +139,114 @@ RSA * DFVACrypto::get_private_key(){
     return rsa;
 }
 
-string  DFVACrypto::encrypt(string data){ 
-	string ciphertext;
+char * DFVACrypto::get_char_from_str(string data){
 	char * vdata = new char [data.length()+1];
 	strcpy (vdata, data.c_str());
+	return vdata;
+}
+
+string  DFVACrypto::encrypt(string data){ 
+
+	size_t n = (size_t)-1;
+	int total_size = 0;
+	std::string cipher_text;
 	
 	unsigned char session_key[SESSION_KEY_SIZE];
 	RAND_bytes(session_key, sizeof(session_key));
 	
-	int data_len=strlen(vdata);
 	
     RSA * pub_key = this->get_public_key();
-    char *session_key_enc = (char *)malloc(RSA_size(pub_key));
-    int result = RSA_public_encrypt(data_len, 
+    unsigned char * session_key_enc = (unsigned char *)malloc(RSA_size(pub_key));
+    
+    int enc_size = RSA_public_encrypt(SESSION_KEY_SIZE, 
 					session_key, 
-					reinterpret_cast<unsigned char *>(session_key_enc),
+					session_key_enc,
 					pub_key,  
 					RSA_PKCS1_OAEP_PADDING);
-					
+	total_size= enc_size;
+	 
 	// AES EAX mode
 	AutoSeededRandomPool rng;
 	EAX< AES >::Encryption enc;
-	byte iv[ AES::BLOCKSIZE * 16 ];
-    rng.GenerateBlock( iv, sizeof(iv) );
-    
-    enc.SetKeyWithIV( session_key, sizeof(session_key), iv, sizeof(iv) );
 
-	StringSource ss( data, true,
-		new AuthenticatedEncryptionFilter( enc,
-			new StringSink( ciphertext )
-		) // AuthenticatedEncryptionFilter
-	); // StringSource
+	byte iv[ IV_SIZE ];
+    rng.GenerateBlock( iv, IV_SIZE);
+    enc.SetKeyWithIV( session_key, SESSION_KEY_SIZE, iv, IV_SIZE );
+	
+	total_size += IV_SIZE ;
+ 
+	CryptoPP::StringSink *string_sink = new CryptoPP::StringSink(cipher_text);
+	// The AuthenticatedEncryptionFilter adds padding as required.
+	  CryptoPP::BufferedTransformation *transformator = NULL;
+	  transformator = new CryptoPP::AuthenticatedEncryptionFilter(
+		  enc,
+		  string_sink);
 
-	return ciphertext;
+	  CryptoPP::StringSource(
+		  data,
+		  true,
+		  transformator);
+
+
+	unsigned char * ciphertext=(unsigned char *)cipher_text.c_str();
+	n=cipher_text.size();
+	total_size += n;
+	byte enc_data[total_size];
+		
+	memcpy(enc_data, session_key_enc, enc_size);
+	memcpy(enc_data + enc_size, iv, IV_SIZE);
+	memcpy(enc_data + enc_size+IV_SIZE,  ciphertext + (n-TAG_SIZE), TAG_SIZE);
+	memcpy(enc_data + enc_size+IV_SIZE+TAG_SIZE, ciphertext, n-TAG_SIZE );
+	
+	//char * b64=this->get_char_from_str(enc_data);
+	return base64encode((unsigned char *)enc_data, total_size);
 }
-string  DFVACrypto::decrypt(string data){ return data;}
+string  DFVACrypto::decrypt(string data){ 
+	string recovered_plain_text;
+
+	string bstring = this->base64decode( data);
+	RSA * priv_key = this->get_private_key();
+	int key_enc_len = RSA_size(priv_key);
+	
+	string enc_session = bstring.substr( 0, key_enc_len);
+	string iv = bstring.substr( key_enc_len, IV_SIZE);
+	string tag = bstring.substr( key_enc_len+IV_SIZE, TAG_SIZE);
+	string enc_message = bstring.substr( key_enc_len+IV_SIZE+TAG_SIZE, bstring.size());
+	string ciphertext = enc_message + tag;
+/**	
+	cout << "enc session key: " << string(this->base64encode((unsigned char*)enc_session.c_str(), key_enc_len)) << endl;
+	cout << "IV: " << this->base64encode((unsigned char *)iv.c_str(), IV_SIZE) << endl;
+	cout << "TAG: " << this->base64encode((unsigned char *)tag.c_str(), TAG_SIZE) << endl;	
+**/
+	unsigned char session_key[32];
+	
+	int  session_key_len = RSA_private_decrypt(key_enc_len, 
+			(unsigned char*)enc_session.c_str(),
+			session_key,
+			priv_key, 
+			RSA_PKCS1_OAEP_PADDING);	
+
+//	cout << "session key: " << this->base64encode(session_key, session_key_len) << endl;
+	
+	
+	EAX< AES >::Decryption decryption;
+	  decryption.SetKeyWithIV(
+      (byte *)session_key, session_key_len,
+      (byte *)iv.c_str());
+	
+	CryptoPP::StringSink *string_sink = new CryptoPP::StringSink(
+	  recovered_plain_text);
+	CryptoPP::BufferedTransformation *transformator = NULL;
+	CryptoPP::AuthenticatedDecryptionFilter *decryption_filter = NULL;
+
+	decryption_filter = new CryptoPP::AuthenticatedDecryptionFilter(
+	  decryption,
+	  string_sink);
+	transformator = new CryptoPP::Redirector(*decryption_filter);
+
+	CryptoPP::StringSource(
+	  ciphertext,
+	  true,
+	  transformator);
+	return recovered_plain_text;
+}

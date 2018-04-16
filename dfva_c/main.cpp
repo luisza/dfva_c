@@ -40,6 +40,14 @@ int main( int argc, const char* argv[] )
 	cout <<  string(b64) << endl << endl ;
 	cout << crypto.get_hash_sum(value.toStyledString(), "sha384") << endl;
 **/
-	cout << crypto.encrypt("Hola mundo") << endl;
+
+	string data = "a13UJIqTDN4NSfq5quezYE+vRbRj1pTf2BgNRYbiReyyCykez3sDfKI0WRPmU3cudTP5ADlg/tAwMXKLoEdr6Up5tj2ptA+aA9uneGQqWWZO1/j3spZ3FuyOSyV4WoVhdem9QW6M2JpvMnMy5TbgtsImY6TUWyC65pnudMvA1CCUIltb/7fD1gnZjVshipdD04NflEyX14Sm9JeJDEPmqD4fsnSyRuUg2ax6HCh3KndlKRiauY3xYsirvVYzq37+EgWxupyr/az5E6XOxBie184v3WVGN7wZCAO+SPW5LXi0nWnlRIs1M95s0Ui7JSs1cx1WTDMcR/bJCcjRwr6gILB4+QWzmezbkWDsjvbpX94v4keh3+zUD+HD1En8en7bh+Jei9bUHko5uQ==";
+	
+	
+	/**
+	string data="aG9sYSBtdW5kbw==";
+	cout << crypto.base64decode( data) << endl;
+**/
+	cout << crypto.decrypt(data) << endl;
 }
 
