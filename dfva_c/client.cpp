@@ -9,6 +9,7 @@
 
 #define SIGN_AUTH_ERROR 1
 #define VALIDATE_ERROR 2
+#define SIGN_AUTH_DELETE 3
 
 using namespace std;
 using namespace Json;
@@ -55,6 +56,8 @@ DFVAClient::DFVAClient(){
 	error_validate_data["identification"] = 0;
 	error_validate_data["received_notification"] = 0;
     error_validate_data["status_text"] = "Problema de comunicación interna";
+    
+    error_delete["result"] = false;
 		
 }
 void DFVAClient::set_algorithm(string new_algorithm){
@@ -90,6 +93,9 @@ Json::Value DFVAClient::parse_json_data(string data, int defualt_error){
 				return error_sign_auth_data;
 			case VALIDATE_ERROR:
 				return error_validate_data;
+			case SIGN_AUTH_DELETE:
+				return error_delete;
+			
 			default:
 				return error_sign_auth_data;
 			
@@ -111,37 +117,37 @@ string DFVAClient::get_timezone(){
 }
 
 Json::Value DFVAClient::authenticate(string identification){
-	  Json::Value data;
-	  data["institution"] =  settings.CODE;
-      data["notification_url"]= settings.URL_NOTIFY;
-      data["identification"]=identification;
-      data["request_datetime"]= this->get_timezone();
-      Json::Value params = this->get_post_params(data.toStyledString()); 
-      string url = settings.DFVA_SERVER_URL + settings.AUTHENTICATE_INSTITUTION;
-      
-	  string result = this->post((char *)url.c_str(), 
-							(char *)params.toStyledString().c_str());
-	  
-	  
-	  Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR);  
+	Json::Value data;
+	data["institution"] =  settings.CODE;
+	data["notification_url"]= settings.URL_NOTIFY;
+	data["identification"]=identification;
+	data["request_datetime"]= this->get_timezone();
+	Json::Value params = this->get_post_params(data.toStyledString()); 
+	string url = settings.DFVA_SERVER_URL + settings.AUTHENTICATE_INSTITUTION;
+
+	string result = this->post((char *)url.c_str(), 
+						(char *)params.toStyledString().c_str());
+
+
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR);  
 	return rdata;
 }
 Json::Value DFVAClient::autenticate_check(string code){
-	  Json::Value data;
-	  data["institution"] =  settings.CODE;
-      data["notification_url"]= settings.URL_NOTIFY;
-      data["request_datetime"]= this->get_timezone();
-      Json::Value params = this->get_post_params(data.toStyledString());
-      string url = settings.DFVA_SERVER_URL + settings.CHECK_AUTHENTICATE_INSTITUTION; 
-      string replacement = "%s";
-	  url.replace(url.find(replacement), replacement.length(), code);
+	Json::Value data;
+	data["institution"] =  settings.CODE;
+	data["notification_url"]= settings.URL_NOTIFY;
+	data["request_datetime"]= this->get_timezone();
+	Json::Value params = this->get_post_params(data.toStyledString());
+	string url = settings.DFVA_SERVER_URL + settings.CHECK_AUTHENTICATE_INSTITUTION; 
+	string replacement = "%s";
+	url.replace(url.find(replacement), replacement.length(), code);
 
-	  string result = this->post((char *)url.c_str(), 
-							(char *)params.toStyledString().c_str());
-	  
-	  
-	  Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR); 	  
-	  
+	string result = this->post((char *)url.c_str(), 
+						(char *)params.toStyledString().c_str());
+
+
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR); 	  
+
 	return rdata;
 }
 bool DFVAClient::autenticate_delete(string code){
@@ -150,34 +156,61 @@ bool DFVAClient::autenticate_delete(string code){
       data["notification_url"]= settings.URL_NOTIFY;
       data["request_datetime"]= this->get_timezone();
       Json::Value params = this->get_post_params(data.toStyledString()); 
+      string url = settings.DFVA_SERVER_URL + settings.AUTHENTICATE_DELETE; 
+      string replacement = "%s";
+	  url.replace(url.find(replacement), replacement.length(), code);
 
-	return true;	
+	  string result = this->post((char *)url.c_str(), 
+							(char *)params.toStyledString().c_str());
+	  
+	  Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_DELETE); 
+	  bool dev=false;
+	  if(rdata.isMember("result")){
+		 dev=rdata["result"].asBool();
+	  }
+	  
+	return dev;	
 }
 Json::Value DFVAClient::sign(string identification, string document, string resume, string format){
-		Json::Value data;
-		data["institution"]=  settings.CODE;
-		data["notification_url"]=settings.URL_NOTIFY;
-		data["document"]= document;
-		data["format"]= format;
-		data["algorithm_hash"]= settings.ALGORITHM;
-	   // data["document_hash"]= get_hash_sum(document,  settings.ALGORITHM);
-		data["identification"]=identification;
-		data["resumen"]= resume;
-		data["request_datetime"]= this->get_timezone();
-		
-		Json::Value params = this->get_post_params(data.toStyledString()); 
+	Json::Value data;
+	data["institution"]=  settings.CODE;
+	data["notification_url"]=settings.URL_NOTIFY;
+	data["document"]= document;
+	data["format"]= format;
+	data["algorithm_hash"]= settings.ALGORITHM;
+	data["document_hash"]= this->crypto.get_hash_sum(document, settings.ALGORITHM);
+	data["identification"]=identification;
+	data["resumen"]= resume;
+	data["request_datetime"]= this->get_timezone();
 
-		return data;
+	Json::Value params = this->get_post_params(data.toStyledString()); 
+	string url = settings.DFVA_SERVER_URL + settings.SIGN_INSTUTION;
 
-	}
+	string result = this->post((char *)url.c_str(), 
+				(char *)params.toStyledString().c_str());
+
+
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR);  
+	return rdata;
+
+}
 Json::Value DFVAClient::sign_check(string code){
 	Json::Value data;
 	data["institution"] =  settings.CODE;
 	data["notification_url"]= settings.URL_NOTIFY;
 	data["request_datetime"]= this->get_timezone();
 	Json::Value params = this->get_post_params(data.toStyledString()); 
+	string url = settings.DFVA_SERVER_URL + settings.CHECK_SIGN_INSTITUTION; 
+	string replacement = "%s";
+	url.replace(url.find(replacement), replacement.length(), code);
 
-	return data;
+	string result = this->post((char *)url.c_str(), 
+						(char *)params.toStyledString().c_str());
+
+
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR); 	  
+
+	return rdata;
 }
 bool DFVAClient::sign_delete(string code){
 	  Json::Value data;
@@ -185,28 +218,54 @@ bool DFVAClient::sign_delete(string code){
       data["notification_url"]= settings.URL_NOTIFY;
       data["request_datetime"]= this->get_timezone();
       Json::Value params = this->get_post_params(data.toStyledString()); 
+      string url = settings.DFVA_SERVER_URL + settings.SIGN_DELETE; 
+      string replacement = "%s";
+	  url.replace(url.find(replacement), replacement.length(), code);
 
-	return true;		
+	  string result = this->post((char *)url.c_str(), 
+							(char *)params.toStyledString().c_str());
+	  
+	  Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_DELETE); 
+	  bool dev=false;
+	  if(rdata.isMember("result")){
+		 dev=rdata["result"].asBool();
+	  }
+	  
+	return dev;			
 }
 Json::Value DFVAClient::validate(string document, string type, string format){
-	  Json::Value data;
-	  data["institution"] =  settings.CODE;
-      data["notification_url"]= settings.URL_NOTIFY;
-      data["document"]=document;
-      data["request_datetime"]= this->get_timezone();
-      Json::Value params = this->get_post_params(data.toStyledString()); 
+	Json::Value data;
+	data["institution"] =  settings.CODE;
+	data["notification_url"]= settings.URL_NOTIFY;
+	data["document"]=document;
+	data["request_datetime"]= this->get_timezone();
+	Json::Value params = this->get_post_params(data.toStyledString()); 
+	string url = settings.DFVA_SERVER_URL + settings.AUTHENTICATE_INSTITUTION;
 
-	return data;
+	string result = this->post((char *)url.c_str(), 
+					(char *)params.toStyledString().c_str());
+
+
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR);  
+	return rdata;
 }
 bool DFVAClient::is_suscriptor_connected(string identification, string format){
-	  Json::Value data;
-	  data["institution"] =  settings.CODE;
-      data["notification_url"]= settings.URL_NOTIFY;
-      data["identification"]=identification;
-      data["request_datetime"]= this->get_timezone();
-      Json::Value params = this->get_post_params(data.toStyledString()); 
-        
-	return true;
+	Json::Value data;
+	data["institution"] =  settings.CODE;
+	data["notification_url"]= settings.URL_NOTIFY;
+	data["identification"]=identification;
+	data["request_datetime"]= this->get_timezone();
+	Json::Value params = this->get_post_params(data.toStyledString()); 
+	string url = settings.SUSCRIPTOR_CONNECTED;
+	string result = this->post((char *)url.c_str(), 
+						(char *)params.toStyledString().c_str());
+
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_DELETE); 
+	bool dev=false;
+	if(rdata.isMember("result")){
+	   dev=rdata["result"].asBool();
+	}
+	return dev;	
 }
 
 size_t WriteCallback(char *contents, size_t size, size_t nmemb, void *userp)

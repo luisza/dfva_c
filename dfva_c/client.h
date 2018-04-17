@@ -27,6 +27,7 @@ class DFVAClient {
 		
 		Json::Value error_sign_auth_data;
 		Json::Value error_validate_data;
+		Json::Value error_delete;
 		
 		AppSettings settings;
 		DFVACrypto crypto;
