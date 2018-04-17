@@ -7,6 +7,9 @@
 #include "settingsmanager.h"
 using namespace std;
 
+#ifndef _dfva_crypto_
+#define _dfva_crypto_
+
 class DFVACrypto {
 	public:
 		DFVACrypto();
@@ -24,3 +27,5 @@ class DFVACrypto {
 		char * get_char_from_str(string data);
 		AppSettings settings;
 };
+
+#endif

@@ -17,7 +17,8 @@ class AppSettings{
 	public: 
 		string TIMEZONE = "America/Costa_Rica";
 		string ALGORITHM = "sha512";
-		string DFVA_SERVER_URL = "http://localhost:8000";
+		string DFVA_SERVER_URL = "http://localhost";
+		string DFVA_SERVER_PORT = "8000";
 		string AUTHENTICATE_INSTITUTION = "/authenticate/institution/";
 		string CHECK_AUTHENTICATE_INSTITUTION = "/authenticate/%s/institution_show/";
 		string AUTHENTICATE_DELETE = "/authenticate/%s/institution_delete/";
@@ -27,6 +28,7 @@ class AppSettings{
 		string VALIDATE_CERTIFICATE = "/validate/institution_certificate/";
 		string VALIDATE_DOCUMENT = "/validate/institution_document/";
 		string SUSCRIPTOR_CONNECTED = "/validate/institution_suscriptor_connected/";
+
 
 
 	

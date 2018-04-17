@@ -56,6 +56,7 @@ AppSettings SettingsManager::_load_settings_from_file(){
 	 
 	dfva.lookupValue("ALGORITHM", appsettings.ALGORITHM);
 	dfva.lookupValue("DFVA_SERVER_URL", appsettings.DFVA_SERVER_URL);
+	dfva.lookupValue("DFVA_SERVER_PORT", appsettings.DFVA_SERVER_PORT);
 	dfva.lookupValue("AUTHENTICATE_INSTITUTION", appsettings.AUTHENTICATE_INSTITUTION);
 	dfva.lookupValue("CHECK_AUTHENTICATE_INSTITUTION",  appsettings.CHECK_AUTHENTICATE_INSTITUTION);
 	dfva.lookupValue("AUTHENTICATE_DELETE",  appsettings.AUTHENTICATE_DELETE);
@@ -97,6 +98,7 @@ int SettingsManager::save(AppSettings appsettings){
 	
 	dfva.add("ALGORITHM", Setting::TypeString) = appsettings.ALGORITHM;
 	dfva.add("DFVA_SERVER_URL", Setting::TypeString) = appsettings.DFVA_SERVER_URL;
+	dfva.add("DFVA_SERVER_PORT", Setting::TypeString) = appsettings.DFVA_SERVER_PORT;
 	dfva.add("AUTHENTICATE_INSTITUTION", Setting::TypeString) = appsettings.AUTHENTICATE_INSTITUTION;
 	dfva.add("CHECK_AUTHENTICATE_INSTITUTION", Setting::TypeString) = appsettings.CHECK_AUTHENTICATE_INSTITUTION;
 	dfva.add("AUTHENTICATE_DELETE", Setting::TypeString) = appsettings.AUTHENTICATE_DELETE;
