@@ -1,4 +1,6 @@
 #include <iostream>
+#include <exception>
+
 #include "client.h"
 #include <jsoncpp/json/json.h>
 #include <curl/curl.h>
@@ -14,26 +16,33 @@
 using namespace std;
 using namespace Json;
 
-const char* SignFormatStr[] = {
+#define SIGNFORMATSTR  5
+#define VALIDATEFORMATSTR 6
+
+const string SignFormatStr[] = {
       "xml_cofirma",
       "xml_contrafirma",
       "odf",
-      "msoffice"
+      "msoffice",
+      "pdf"
 };
 
-const char* ValidateFormatStr[]{
+const string ValidateFormatStr[]{
 	"certificate", 
 	"cofirma", 
 	"contrafirma", 
 	"odf", 
-	"msoffice"
+	"msoffice",
+	"pdf"
 };
 
-const char* AlgorithmStr[] = {
-      "sha256",
-	  "sha384",
-	  "sha512"
-};
+
+bool check_if_exists(const string data[], int size, string compare){
+   for(int x=0; x<size; x++){
+		if(compare.compare(data[x]) == 0) return true;
+   }
+  return false;
+}
 
 DFVAClient::DFVAClient(){
 	SettingsManager settingsManager;
@@ -60,9 +69,7 @@ DFVAClient::DFVAClient(){
     error_delete["result"] = false;
 		
 }
-void DFVAClient::set_algorithm(string new_algorithm){
-	algorithm=new_algorithm;
-}
+
 
 Json::Value  DFVAClient::get_post_params(string enc_parameters){
 	string edata = this->crypto.encrypt(enc_parameters);
@@ -78,7 +85,22 @@ Json::Value  DFVAClient::get_post_params(string enc_parameters){
 	return params;
 }
 
-Json::Value DFVAClient::parse_json_data(string data, int defualt_error){
+Json::Value DFVAClient::get_default_error(int default_error){
+	
+	switch(default_error){
+		case SIGN_AUTH_ERROR:
+			return error_sign_auth_data;
+		case VALIDATE_ERROR:
+			return error_validate_data;
+		case SIGN_AUTH_DELETE:
+			return error_delete;
+		default:
+			return error_sign_auth_data;	
+	}
+	return error_sign_auth_data;
+}
+
+Json::Value DFVAClient::parse_json_data(string data, int default_error, bool check_connected=false){
 	Json::Value root;   // will contains the root value after parsing.
 	Json::Reader reader;
 	bool parsingSuccessful = reader.parse( data, root );
@@ -86,25 +108,28 @@ Json::Value DFVAClient::parse_json_data(string data, int defualt_error){
 	if ( !parsingSuccessful )
 	{
 		// report to the user the failure and their locations in the document.
-		std::cout  << "Failed to parse configuration\n"
+		std::cerr  << "Failed to parse configuration\n"
 				   << reader.getFormattedErrorMessages();
-		switch(defualt_error){
-			case SIGN_AUTH_ERROR:
-				return error_sign_auth_data;
-			case VALIDATE_ERROR:
-				return error_validate_data;
-			case SIGN_AUTH_DELETE:
-				return error_delete;
-			
-			default:
-				return error_sign_auth_data;
-			
-		}
+		return get_default_error(default_error);
 	}
 
-	
-	string dec_data = this->crypto.decrypt(root["data"].toStyledString());
-	parsingSuccessful = reader.parse( dec_data, root );
+	try{
+		if(check_connected){
+			return root;
+		}
+		
+		string dec_data = this->crypto.decrypt(root["data"].toStyledString());
+		parsingSuccessful = reader.parse( dec_data, root );
+		if ( !parsingSuccessful )
+		{
+			// report to the user the failure and their locations in the document.
+			std::cerr  << "Failed to parse configuration\n"
+					   << reader.getFormattedErrorMessages();
+			return get_default_error(default_error);
+		}
+	}catch(...) {
+		return get_default_error(default_error);
+	}
 
 	return root;
 }
@@ -172,6 +197,9 @@ bool DFVAClient::autenticate_delete(string code){
 	return dev;	
 }
 Json::Value DFVAClient::sign(string identification, string document, string resume, string format){
+	if(!check_if_exists(SignFormatStr, SIGNFORMATSTR , format))
+	 throw "Format is not supported";
+
 	Json::Value data;
 	data["institution"]=  settings.CODE;
 	data["notification_url"]=settings.URL_NOTIFY;
@@ -233,15 +261,25 @@ bool DFVAClient::sign_delete(string code){
 	  
 	return dev;			
 }
-Json::Value DFVAClient::validate(string document, string type, string format){
+Json::Value DFVAClient::validate(string document, string format){
 	Json::Value data;
+	string url;
+	if(!check_if_exists(ValidateFormatStr, VALIDATEFORMATSTR,format))
+	 throw "Format is not supported";
+	
 	data["institution"] =  settings.CODE;
 	data["notification_url"]= settings.URL_NOTIFY;
 	data["document"]=document;
 	data["request_datetime"]= this->get_timezone();
+	
+	if(format.compare("certificate")==0){
+		url = settings.DFVA_SERVER_URL + settings.VALIDATE_CERTIFICATE;
+	}else{
+		data["format"] = format;
+		url = settings.DFVA_SERVER_URL + settings.VALIDATE_DOCUMENT;
+	}
+	
 	Json::Value params = this->get_post_params(data.toStyledString()); 
-	string url = settings.DFVA_SERVER_URL + settings.AUTHENTICATE_INSTITUTION;
-
 	string result = this->post((char *)url.c_str(), 
 					(char *)params.toStyledString().c_str());
 
@@ -249,21 +287,21 @@ Json::Value DFVAClient::validate(string document, string type, string format){
 	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_ERROR);  
 	return rdata;
 }
-bool DFVAClient::is_suscriptor_connected(string identification, string format){
+bool DFVAClient::is_suscriptor_connected(string identification){
 	Json::Value data;
 	data["institution"] =  settings.CODE;
 	data["notification_url"]= settings.URL_NOTIFY;
 	data["identification"]=identification;
 	data["request_datetime"]= this->get_timezone();
 	Json::Value params = this->get_post_params(data.toStyledString()); 
-	string url = settings.SUSCRIPTOR_CONNECTED;
+	string url =  settings.DFVA_SERVER_URL +  settings.SUSCRIPTOR_CONNECTED;
 	string result = this->post((char *)url.c_str(), 
 						(char *)params.toStyledString().c_str());
 
-	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_DELETE); 
+	Json::Value rdata = this->parse_json_data(result, SIGN_AUTH_DELETE, true); 
 	bool dev=false;
-	if(rdata.isMember("result")){
-	   dev=rdata["result"].asBool();
+	if(rdata.isMember("is_connected")){
+	   dev=rdata["is_connected"].asBool();
 	}
 	return dev;	
 }
@@ -274,7 +312,7 @@ size_t WriteCallback(char *contents, size_t size, size_t nmemb, void *userp)
     return size * nmemb;
 }
 
-string DFVAClient::post(char * url, char * data){
+string DFVAClient::_post(char * url, char * data){
 	CURL *curl;
 	CURLcode res;
 	string readBuffer;
@@ -322,13 +360,31 @@ string DFVAClient::post(char * url, char * data){
     /* Perform the request, res will get the return code */ 
     res = curl_easy_perform(curl);
     /* Check for errors */ 
-    if(res != CURLE_OK)
-      fprintf(stderr, "curl_easy_perform() failed: %s\n",
-              curl_easy_strerror(res));
- 
+    if(res != CURLE_OK){
+		cerr <<  "curl_easy_perform() failed: %s\n" << 
+              curl_easy_strerror(res) << endl;
+      curl_easy_cleanup(curl);
+      throw "Curl response is not OK";
+	}
     /* always cleanup */ 
     curl_easy_cleanup(curl);
+  }else{
+	 throw "Curl could not be inicializated";
   }
   curl_global_cleanup();
   return readBuffer;
 }
+
+string DFVAClient::post(char * url, char * data){
+	string dev;
+	try{
+		dev = _post(url, data);
+	}catch(const exception &e) {
+		cerr << "Standard exception: " << e.what() << endl;
+		dev="";
+	}catch(...) {
+		dev="";
+	}
+	return dev;
+}
+

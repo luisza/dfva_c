@@ -38,6 +38,7 @@ AppSettings SettingsManager::load_settings_from_file(){
 	  {
 		 appsettings= AppSettings();
 		 this->save(appsettings);
+		 throw "Settings need to be updated: "+string(get_config_filename());
 	  }	
 	return appsettings;
 }
