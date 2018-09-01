@@ -12,6 +12,7 @@
 #define SIGN_AUTH_ERROR 1
 #define VALIDATE_ERROR 2
 #define SIGN_AUTH_DELETE 3
+#define HASHSUM_ERROR 4
 
 using namespace std;
 using namespace Json;
@@ -66,6 +67,13 @@ DFVAClient::DFVAClient(){
 	error_validate_data["received_notification"] = 0;
     error_validate_data["status_text"] = "Problema de comunicación interna";
     
+    
+    error_hashsum_data["code"] = "N/D";
+	error_hashsum_data["status"]= -2;
+	error_hashsum_data["identification"] = 0;
+	error_hashsum_data["received_notification"] = 0;
+    error_hashsum_data["status_text"] = "Problema al calcular sumas hash, son diferentes";
+    
     error_delete["result"] = false;
 		
 }
@@ -94,6 +102,8 @@ Json::Value DFVAClient::get_default_error(int default_error){
 			return error_validate_data;
 		case SIGN_AUTH_DELETE:
 			return error_delete;
+		case HASHSUM_ERROR:
+			return error_hashsum_data;
 		default:
 			return error_sign_auth_data;	
 	}
@@ -118,7 +128,19 @@ Json::Value DFVAClient::parse_json_data(string data, int default_error, bool che
 			return root;
 		}
 		
+		Json::FastWriter fastWriter;
+		string datahash = fastWriter.write(root["data_hash"]);
+		datahash.erase(datahash.begin()); // "
+		datahash.erase(datahash.end()-1); // "
+		datahash.erase(datahash.end()-1); // \n
+		
 		string dec_data = this->crypto.decrypt(root["data"].toStyledString());
+		string newhash = this->crypto.get_hash_sum(dec_data, settings.ALGORITHM);
+		
+		if(newhash.compare(datahash) != 0){
+				return this->get_default_error(HASHSUM_ERROR);
+		}
+		
 		parsingSuccessful = reader.parse( dec_data, root );
 		if ( !parsingSuccessful )
 		{
@@ -304,6 +326,10 @@ bool DFVAClient::is_suscriptor_connected(string identification){
 	   dev=rdata["is_connected"].asBool();
 	}
 	return dev;	
+}
+
+Json::Value DFVAClient::get_notify_data(string data){
+	return this->parse_json_data(data, SIGN_AUTH_ERROR); 
 }
 
 size_t WriteCallback(char *contents, size_t size, size_t nmemb, void *userp)

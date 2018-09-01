@@ -19,6 +19,7 @@ class DFVAClient {
 		bool sign_delete(string code);
 		Json::Value validate(string document, string format);
 		bool is_suscriptor_connected(string identification);
+		Json::Value get_notify_data(string data);
 		
 	private:
 		string get_timezone();
@@ -32,6 +33,7 @@ class DFVAClient {
 		Json::Value error_sign_auth_data;
 		Json::Value error_validate_data;
 		Json::Value error_delete;
+		Json::Value error_hashsum_data;
 		Json::Value parse_json_data(string data, int default_error, bool check_connected);
 				
 		AppSettings settings;
